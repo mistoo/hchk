@@ -33,7 +33,14 @@ fn colored_status(status: &String) -> ColoredString {
     return status.color(c);
 }
 
-fn cmd_list_checks(api_key: &str, query: Option<&str>) {
+
+struct LsFlags {
+    up: bool,
+    down: bool,
+    long: bool
+}
+
+fn cmd_list_checks(api_key: &str, flags: &LsFlags, query: Option<&str>) {
     let re = api::get_checks(api_key, query);
     if re.is_err() {
         println!("err {:?}", re);
@@ -41,13 +48,25 @@ fn cmd_list_checks(api_key: &str, query: Option<&str>) {
     }
 
     let mut checks = re.unwrap();
-    println!("total {:?}", checks.len());
 
     checks.sort_by(|a, b| a.name.cmp(&b.name));
+    if flags.up || flags.down {
+        checks = checks.into_iter().filter(|c| (flags.down && c.status == "down") || (flags.up && c.status == "up")).collect();
+    }
+
+    let tty = stdout_isatty();
+    if tty {
+        println!("total {:?}", checks.len());
+    }
 
     for c in checks {
+        if flags.long {
+            println!("{}", serde_json::to_string_pretty(&c).unwrap());
+            continue
+        }
+
         let mut status = colored_status(&c.status);
-        if !stdout_isatty() {
+        if !tty {
             status = status.clear();
         }
 
@@ -60,23 +79,19 @@ fn cmd_list_checks(api_key: &str, query: Option<&str>) {
     }
 }
 
-fn cmd_add_check(api_key: &str, name: &str, schedule: &str) {
-    let re = api::find_check(api_key, name);
-    if re.is_none() {
-        return
-    }
+fn cmd_add_check(api_key: &str, name: Option<&str>, schedule: Option<&str>, grace: Option<&str>, tz: Option<&str>, tags: Option<&str>) {
+    let grace_s = grace.unwrap_or("1");
+    let grace_v = grace_s.parse::<u32>().unwrap_or(1);
 
-    let c = re.unwrap();
-    let re = api::delete_check(api_key, &c);
+    let re = api::add_check(api_key, name.unwrap(), schedule.unwrap(), grace_v, tz, tags);
     if re.is_err() {
         println!("err {:?}", re);
         return
     }
 
-    //let mut check = re.unwrap();
-    //println!("check {}", check.status)
+    let check = re.unwrap();
+    println!("{} {} {}", check.name, check.id(), check.ping_url)
 }
-
 
 fn cmd_pause_check(api_key: &str, id: Option<&str>) {
     let re = api::find_check(api_key, id.unwrap());
@@ -123,9 +138,6 @@ fn cmd_delete_check(api_key: &str, id: Option<&str>) {
         println!("err {:?}", re);
         return
     }
-
-    //let mut check = re.unwrap();
-    //println!("check {}", check.status)
 }
 
 const API_KEY_ENV: &'static str = "HCHK_API_KEY";
@@ -153,17 +165,19 @@ fn run(cmd: Command, args: &clap::ArgMatches) {
     let key = skey.as_str();
 
     match cmd {
-        Command::List => cmd_list_checks(key, args.value_of("query")),
+        Command::List => cmd_list_checks(key, &LsFlags{ long: args.is_present("long"), up: args.is_present("up"), down: args.is_present("down") }, args.value_of("query"), ),
+        Command::Add => cmd_add_check(key, args.value_of("name"), args.value_of("schedule"),
+                                      args.value_of("grace"), args.value_of("tags"), args.value_of("tz")),
         Command::Ping => cmd_ping_check(key, args.value_of("id")),
         Command::Pause => cmd_pause_check(key, args.value_of("id")),
-        Command::Delete => cmd_delete_check(key, args.value_of("id")),
-        _ => println!("not implemented yet"),
+        Command::Delete => cmd_delete_check(key, args.value_of("id"))
+        //_ => println!("not implemented yet"),
     }
 }
 
 fn main() {
     let matches = App::new("hchk")
-        .version("1.0")
+        .version("0.1.0")
         .arg(Arg::with_name("v")
              .short("v")
              .multiple(true)
@@ -181,15 +195,19 @@ fn main() {
                     .arg(Arg::with_name("id").help("check's ID to delete").required(true)))
         .subcommand(SubCommand::with_name("add").about("Add check")
                     .arg(Arg::with_name("name").help("name").required(true))
-                    .arg(Arg::with_name("schedule").help("schedule in cron format").required(true)))
+                    .arg(Arg::with_name("schedule").help("schedule in cron format").required(true))
+                    .arg(Arg::with_name("grace").help("grace in hours"))
+                    .arg(Arg::with_name("tz").help("timezone"))
+                    .arg(Arg::with_name("tags").help("tags")))
 
         .get_matches();
 
     // You can handle information about subcommands by requesting their matches by name
     // (as below), requesting just the name used, or both at the same time
     if let Some(matches) = matches.subcommand_matches("ls") {
-        //println!("{:?}", matches);
         run(Command::List, matches)
+    } else if let Some(matches) = matches.subcommand_matches("add") {
+        run(Command::Add, matches)
     } else if let Some(matches) = matches.subcommand_matches("pause") {
         run(Command::Pause, matches)
     } else if let Some(matches) = matches.subcommand_matches("ping") {
@@ -197,5 +215,4 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("del") {
         run(Command::Delete, matches)
     }
-    //list_checks()
 }
