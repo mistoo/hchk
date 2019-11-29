@@ -15,6 +15,9 @@ extern crate isatty;
 
 use std::env;
 use std::process;
+use std::fs::File;
+use std::path::Path;
+use std::io::prelude::*;
 use clap::{Arg, App, SubCommand};
 use colored::*;
 use isatty::{stdout_isatty};
@@ -32,7 +35,6 @@ fn colored_status(status: &String) -> ColoredString {
 
     return status.color(c);
 }
-
 
 struct LsFlags {
     up: bool,
@@ -140,38 +142,76 @@ fn cmd_delete_check(api_key: &str, id: Option<&str>) {
     }
 }
 
+fn keyfile_path() -> String {
+    let home = env::var("HOME");
+    if home.is_err() {
+        println!("empty HOME environment variable");
+        process::exit(1);
+    }
+
+    home.unwrap() + "/.hchk"
+}
+
+fn cmd_setkey(key: Option<&str>) {
+    println!("setkey");
+    let path = keyfile_path();
+    let mut file = File::create(path).unwrap();
+    file.write_all(key.unwrap().as_bytes()).unwrap();
+}
+
 const API_KEY_ENV: &'static str = "HCHK_API_KEY";
 fn get_api_key() -> String {
     let key = env::var(API_KEY_ENV);
 
     if key.is_err() {
-        println!("please set {} environment variable", API_KEY_ENV);
+        let path = keyfile_path();
+        if Path::new(&path).is_file() {
+            let file = File::open(path);
+            let mut contents = String::new();
+            file.unwrap().read_to_string(&mut contents).unwrap();
+            return contents
+        }
+    }
+
+    if key.is_err() {
+        println!("use setkey command or set {} environment variable", API_KEY_ENV);
         process::exit(1);
     }
-    //println!("api_key {:?}", get_api_key());
-    return key.unwrap()
+
+    key.unwrap()
 }
 
 enum Command {
+    List,
     Add,
     Delete,
     Pause,
     Ping,
-    List,
+    SetKey
 }
 
 fn run(cmd: Command, args: &clap::ArgMatches) {
-    let skey = get_api_key();
-    let key = skey.as_str();
+    let key = match cmd {
+        Command::SetKey => "".to_string(),
+        _ => get_api_key()
+    };
 
     match cmd {
-        Command::List => cmd_list_checks(key, &LsFlags{ long: args.is_present("long"), up: args.is_present("up"), down: args.is_present("down") }, args.value_of("query"), ),
-        Command::Add => cmd_add_check(key, args.value_of("name"), args.value_of("schedule"),
-                                      args.value_of("grace"), args.value_of("tags"), args.value_of("tz")),
-        Command::Ping => cmd_ping_check(key, args.value_of("id")),
-        Command::Pause => cmd_pause_check(key, args.value_of("id")),
-        Command::Delete => cmd_delete_check(key, args.value_of("id"))
-        //_ => println!("not implemented yet"),
+        Command::List => cmd_list_checks(&key,
+                                         &LsFlags{ long: args.is_present("long"),
+                                                   up: args.is_present("up"),
+                                                   down: args.is_present("down") },
+                                         args.value_of("query")),
+        Command::Add => cmd_add_check(&key,
+                                      args.value_of("name"),
+                                      args.value_of("schedule"),
+                                      args.value_of("grace"),
+                                      args.value_of("tags"),
+                                      args.value_of("tz")),
+        Command::Ping => cmd_ping_check(&key, args.value_of("id")),
+        Command::Pause => cmd_pause_check(&key, args.value_of("id")),
+        Command::Delete => cmd_delete_check(&key, args.value_of("id")),
+        Command::SetKey => cmd_setkey(args.value_of("key"))
     }
 }
 
@@ -182,6 +222,8 @@ fn main() {
              .short("v")
              .multiple(true)
              .help("be verbose"))
+        .subcommand(SubCommand::with_name("setkey").about("Save API key to $HOME/.hchk")
+                    .arg(Arg::with_name("key").help("API key")))
         .subcommand(SubCommand::with_name("ls").about("List checks")
                     .arg(Arg::with_name("long").short("l").help("long listing"))
                     .arg(Arg::with_name("up").short("u").help("list 'up' only checks"))
@@ -204,7 +246,9 @@ fn main() {
 
     // You can handle information about subcommands by requesting their matches by name
     // (as below), requesting just the name used, or both at the same time
-    if let Some(matches) = matches.subcommand_matches("ls") {
+    if let Some(matches) = matches.subcommand_matches("setkey") {
+        run(Command::SetKey, matches)
+    } else if let Some(matches) = matches.subcommand_matches("ls") {
         run(Command::List, matches)
     } else if let Some(matches) = matches.subcommand_matches("add") {
         run(Command::Add, matches)
