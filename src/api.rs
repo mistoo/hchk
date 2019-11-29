@@ -126,7 +126,7 @@ pub fn add_check(api_key: &str, name: &str, schedule: &str, grace: u32, tz: Opti
 
 pub fn delete_check(api_key: &str, check: &Check) -> Result<Check, SimpleError> {
     let url = format!("{}{}", BASE_URL, check.id());
-    let re = agent(api_key).delete(url).call();
+    let re = agent(api_key).delete(&url).call();
 
     if !re.ok() {
         return Err(err(format!("request failed with {:?}", re.status())))
@@ -138,7 +138,7 @@ pub fn delete_check(api_key: &str, check: &Check) -> Result<Check, SimpleError> 
 }
 
 pub fn ping_check(api_key: &str, check: &Check) -> Result<(), SimpleError> {
-    let re = agent(api_key).get(check.ping_url.clone()).call();
+    let re = agent(api_key).get(&check.ping_url).call();
 
     if !re.ok() {
         return Err(err(format!("request failed with {:?}", re.status())))
@@ -149,7 +149,7 @@ pub fn ping_check(api_key: &str, check: &Check) -> Result<(), SimpleError> {
 
 pub fn pause_check(api_key: &str, check: &Check) -> Result<Check, SimpleError> {
     let url = format!("{}{}/pause", BASE_URL, check.id());
-    let re = agent(api_key).post(url).call();
+    let re = agent(api_key).post(&url).call();
 
     if !re.ok() {
         return Err(err(format!("request failed with {:?}", re.status())))
