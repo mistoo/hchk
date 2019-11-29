@@ -56,4 +56,4 @@ List `down` checks:
 
 # Build
 
-$ cargo build --release
+`$ cargo build --release`
