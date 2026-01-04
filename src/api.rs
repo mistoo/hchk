@@ -1,4 +1,4 @@
-use ureq;
+use reqwest::blocking::Client;
 use serde_json;
 use simple_error::{SimpleError};
 use serde_json::{Value};
@@ -8,18 +8,18 @@ use chrono::prelude::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Check {
-    pub id: Option<String>,
+    pub id:  Option<String>,
     pub short_id: Option<String>,
     pub name: String,
-    pub ping_url: String, //"https://hc-ping.com/662ebe36-ecab-48db-afe3-e20029cb71e6",
+    pub ping_url: String,
     pub pause_url: String,
-    pub last_ping: Option<String>, //DateTime<Utc>, // "2017-01-04T13:24:39.903464+00:00",
-    pub next_ping: Option<String>, //DateTime<Utc>, // "2017-01-04T14:24:39.903464+00:00",
-    pub grace: u32, // 900,
+    pub last_ping: Option<String>,
+    pub next_ping: Option<String>,
+    pub grace: u32,
     pub n_pings: u32,
     pub tags: String,
     pub timeout: Option<u32>,
-    pub tz: Option<String>,
+    pub tz:  Option<String>,
     pub schedule: Option<String>,
     pub status: String,
     pub update_url: String
@@ -30,7 +30,7 @@ fn parse_datetime(ts: &Option<String>) -> DateTime<Local> {
     let tz = local.timezone();
 
     if ts.is_none() {
-        return Utc.ymd(1901, 01, 01).and_hms(0, 0, 0).with_timezone(&tz)
+        return Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz)
     }
 
     let ts = ts.clone().unwrap();
@@ -85,13 +85,19 @@ impl Check {
     }
 }
 
-const BASE_URL: &'static str = "https://healthchecks.io/api/v1/checks/";
+const BASE_URL:  &'static str = "https://healthchecks.io/api/v1/checks/";
 
-fn agent(api_key: &str) -> ureq::Agent {
-    ureq::Agent::new().set("X-Api-Key", api_key).build()
+fn client(api_key: &str) -> Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("X-Api-Key", api_key.parse().unwrap());
+
+    Client::builder()
+        .default_headers(headers)
+        .build()
+        .unwrap()
 }
 
-fn err(msg: String) -> SimpleError  {
+fn err(msg: String) -> SimpleError {
     SimpleError::new(msg)
 }
 
@@ -106,7 +112,7 @@ pub fn add_check(api_key: &str, name: &str, schedule: &str, grace: u32, tz: Opti
     //}
 
     let c = json!({
-        "name": name,
+        "name":  name,
         "schedule": schedule,
         "grace": grace * 3600,
         "tags": tags_val,
@@ -114,65 +120,63 @@ pub fn add_check(api_key: &str, name: &str, schedule: &str, grace: u32, tz: Opti
         "unique": [ "name" ]
     });
 
-    let re = agent(api_key).set("Content-Type", "application/json").post(BASE_URL).send_json(c);
-    if !re.ok() {
-        return Err(err(format!("request failed with {:?}", re)))
-    }
+    let check: Check = client(api_key)
+        .post(BASE_URL)
+        .json(&c)
+        .send()
+        .map_err(|e| err(format!("request failed with {:?}", e)))?
+        .json()
+        .map_err(|e| err(e.to_string()))?;
 
-    let reader = re.into_reader();
-    let c: Check = serde_json::from_reader(reader).map_err(|e| err(e.to_string()))?;
-    Ok(c)
+    Ok(check)
 }
 
 pub fn delete_check(api_key: &str, check: &Check) -> Result<Check, SimpleError> {
     let url = format!("{}{}", BASE_URL, check.id());
-    let re = agent(api_key).delete(&url).call();
 
-    if !re.ok() {
-        return Err(err(format!("request failed with {:?}", re.status())))
-    }
+    let check: Check = client(api_key)
+        .delete(&url)
+        .send()
+        .map_err(|e| err(format!("request failed with {:?}", e)))?
+        .json()
+        .map_err(|e| err(e.to_string()))?;
 
-    let reader = re.into_reader();
-    let c: Check = serde_json::from_reader(reader).map_err(|e| err(e.to_string()))?;
-    return Ok(c)
+    Ok(check)
 }
 
 pub fn ping_check(api_key: &str, check: &Check) -> Result<(), SimpleError> {
-    let re = agent(api_key).get(&check.ping_url).call();
-
-    if !re.ok() {
-        return Err(err(format!("request failed with {:?}", re.status())))
-    }
+    client(api_key)
+        .get(&check.ping_url)
+        .send()
+        .map_err(|e| err(format!("request failed with {:?}", e)))?;
 
     Ok(())
 }
 
 pub fn pause_check(api_key: &str, check: &Check) -> Result<Check, SimpleError> {
     let url = format!("{}{}/pause", BASE_URL, check.id());
-    let re = agent(api_key).post(&url).call();
 
-    if !re.ok() {
-        return Err(err(format!("request failed with {:?}", re.status())))
-    }
+    let check: Check = client(api_key)
+        .post(&url)
+        .send()
+        .map_err(|e| err(format! ("request failed with {:?}", e)))?
+        .json()
+        .map_err(|e| err(e.to_string()))?;
 
-    let reader = re.into_reader();
-    let c: Check = serde_json::from_reader(reader).map_err(|e| err(e.to_string()))?;
-
-    Ok(c)
+    Ok(check)
 }
 
 pub fn get_checks(api_key: &str, query: Option<&str>) -> Result<Vec<Check>, SimpleError> {
-    let re = agent(api_key).get(BASE_URL).call();
-
-    if !re.ok() {
-        return Err(err(format!("request failed with {:?}", re.status())))
-    }
-
-    let reader = re.into_reader();
-    let v: Value = serde_json::from_reader(reader).map_err(|e| err(e.to_string()))?;
+    let v:  Value = client(api_key)
+        .get(BASE_URL)
+        .send()
+        .map_err(|e| err(format!("request failed with {:?}", e)))?
+        .json()
+        .map_err(|e| err(e.to_string()))?;
 
     let ref checks_ref = Value::to_string(&v["checks"]);
-    let mut checks: Vec<Check> = serde_json::from_str(checks_ref).map_err(|e| err(format!("JSON: {}", e.to_string())))?;
+    let mut checks: Vec<Check> = serde_json::from_str(checks_ref)
+        .map_err(|e| err(format!("JSON: {}", e.to_string())))?;
 
     if let Some(q) = query {
         checks = checks.into_iter().filter(|c| c.name.contains(q) || c.id().contains(q)).collect();
@@ -185,8 +189,8 @@ pub fn get_checks(api_key: &str, query: Option<&str>) -> Result<Vec<Check>, Simp
     Ok(checks)
 }
 
-pub fn find_check(api_key: &str, id: &str) -> Option<Check> {
-    let re = get_checks(api_key.clone(), Some(id));
+pub fn find_check(api_key:  &str, id: &str) -> Option<Check> {
+    let re = get_checks(api_key, Some(id));
     if re.is_err() {
         println!("err {:?}", re);
         return None

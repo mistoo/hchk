@@ -6,9 +6,6 @@ extern crate serde;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
-// requires feature: `ureq = { version = "*", features = ["json"] }`
-extern crate ureq;
-
 extern crate clap;
 extern crate colored;
 extern crate isatty;
