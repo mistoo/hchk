@@ -93,7 +93,7 @@ fn err(msg: String) -> SimpleError {
 
 pub struct ApiClient {
     client: Client,
-    base_url: String
+    pub base_url: String
 }
 
 impl ApiClient {
