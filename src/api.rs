@@ -85,7 +85,7 @@ impl Check {
     }
 }
 
-//const BASE_URL:  &'static str = "https://healthchecks.io/api/v1/checks/";
+const SECONDS_PER_HOUR: u32 = 3600;
 
 fn err(msg: String) -> SimpleError {
     SimpleError::new(msg)
@@ -119,7 +119,7 @@ impl ApiClient {
         let c = json!({
             "name":  name,
             "schedule": schedule,
-            "grace": grace * 3600,
+            "grace": grace * SECONDS_PER_HOUR,
             "tags": tags_val,
             "tz": tz_val,
             "unique": [ "name" ]

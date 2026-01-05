@@ -27,16 +27,14 @@ mod tests;
 
 const BASE_URL: &'static str = "https://healthchecks.io/api/v1/checks/";
 
-fn colored_status(status: &String) -> ColoredString {
-    let c = match status.as_ref() {
-        "up" => "green",
-        "down" => "red",
-        "grace" => "cyan",
-        "paused" => "yellow",
-        _ => "white",
-    };
-
-    return status.color(c);
+fn colored_status(status: &str) -> ColoredString {
+    match status {
+        "up" => status.green(),
+        "down" => status.red(),
+        "grace" => status.cyan(),
+        "paused" => status.yellow(),
+        _ => status.white(),
+    }
 }
 
 struct LsFlags {
@@ -210,8 +208,8 @@ fn run(cmd: Command, args: &clap::ArgMatches) {
                                       args.value_of("name"),
                                       args.value_of("schedule"),
                                       args.value_of("grace"),
-                                      args.value_of("tags"),
-                                      args.value_of("tz")),
+                                      args.value_of("tz"),
+                                      args.value_of("tags")),
         Command::Ping => cmd_ping_check(&client, args.value_of("id")),
         Command::Pause => cmd_pause_check(&client, args.value_of("id")),
         Command::Delete => cmd_delete_check(&client, args.value_of("id")),
