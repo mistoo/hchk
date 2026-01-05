@@ -22,6 +22,9 @@ use isatty::{stdout_isatty};
 mod api;
 use crate::api::ApiClient;
 
+#[cfg(test)]
+mod tests;
+
 const BASE_URL: &'static str = "https://healthchecks.io/api/v1/checks/";
 
 fn colored_status(status: &String) -> ColoredString {
