@@ -25,12 +25,18 @@ pub struct Check {
     pub update_url: String
 }
 
+fn default_datetime() -> DateTime<Local> {
+    let local: DateTime<Local> = Local::now();
+    let tz = local.timezone();
+    Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz)
+}
+
 fn parse_datetime(ts: &Option<String>) -> Result<DateTime<Local>, SimpleError> {
     let local: DateTime<Local> = Local::now();
     let tz = local.timezone();
 
     if ts.is_none() {
-        return Ok(Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz))
+        return Ok(default_datetime())
     }
 
     let ts = ts.as_ref().unwrap();
@@ -61,11 +67,7 @@ impl Check {
     }
 
     pub fn last_ping_at(&self) -> DateTime<Local> {
-        parse_datetime(&self.last_ping).unwrap_or_else(|_| {
-            let local: DateTime<Local> = Local::now();
-            let tz = local.timezone();
-            Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz)
-        })
+        parse_datetime(&self.last_ping).unwrap_or_else(|_| default_datetime())
     }
 
     pub fn humanized_last_ping_at(&self) -> String {
@@ -95,6 +97,7 @@ impl Check {
 }
 
 const SECONDS_PER_HOUR: u32 = 3600;
+const HOURS_PER_YEAR: u32 = 24 * 365; // 8760 hours
 
 fn err(msg: String) -> SimpleError {
     SimpleError::new(msg)
@@ -126,7 +129,7 @@ impl ApiClient {
         if name.trim().is_empty() {
             return Err(err("Check name cannot be empty".to_string()));
         }
-        if grace < 1 || grace > 24 * 365 {
+        if grace < 1 || grace > HOURS_PER_YEAR {
             return Err(err("Grace period must be between 1 hour and 1 year".to_string()));
         }
 

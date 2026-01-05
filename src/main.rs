@@ -86,7 +86,7 @@ fn cmd_add_check(client: &ApiClient, name: Option<&str>, schedule: Option<&str>,
     
     let grace_s = grace.unwrap_or("1");
     let grace_v = grace_s.parse::<u32>()
-        .map_err(|_| format!("Invalid grace period: {}", grace_s))?;
+        .map_err(|_| format!("Grace period must be a valid number, got: {}", grace_s))?;
 
     let check = client.add(name, schedule, grace_v, tz, tags)?;
     println!("{} {} {}", check.name, check.id(), check.ping_url);
