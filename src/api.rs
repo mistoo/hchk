@@ -85,122 +85,132 @@ impl Check {
     }
 }
 
-const BASE_URL:  &'static str = "https://healthchecks.io/api/v1/checks/";
-
-fn client(api_key: &str) -> Client {
-    let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("X-Api-Key", api_key.parse().unwrap());
-
-    Client::builder()
-        .default_headers(headers)
-        .build()
-        .unwrap()
-}
+//const BASE_URL:  &'static str = "https://healthchecks.io/api/v1/checks/";
 
 fn err(msg: String) -> SimpleError {
     SimpleError::new(msg)
 }
 
-pub fn add_check(api_key: &str, name: &str, schedule: &str, grace: u32, tz: Option<&str>, tags: Option<&str>) -> Result<Check, SimpleError> {
-    let tz_val = tz.unwrap_or("UTC");
-    let tags_val = tags.unwrap_or("");
-
-    // shorter form ("* * * * *") is not supported by Schedule
-    //let schedul = Schedule::from_str(schedule);
-    //if schedul.is_err() {
-    //    return Err(err(format!("schedule parse error {:?}", schedule)))
-    //}
-
-    let c = json!({
-        "name":  name,
-        "schedule": schedule,
-        "grace": grace * 3600,
-        "tags": tags_val,
-        "tz": tz_val,
-        "unique": [ "name" ]
-    });
-
-    let check: Check = client(api_key)
-        .post(BASE_URL)
-        .json(&c)
-        .send()
-        .map_err(|e| err(format!("request failed with {:?}", e)))?
-        .json()
-        .map_err(|e| err(e.to_string()))?;
-
-    Ok(check)
+pub struct ApiClient {
+    client: Client,
+    base_url: String
 }
 
-pub fn delete_check(api_key: &str, check: &Check) -> Result<Check, SimpleError> {
-    let url = format!("{}{}", BASE_URL, check.id());
+impl ApiClient {
+    pub fn new(base_url: &str, api_key: &str) -> ApiClient {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("X-Api-Key", api_key.parse().unwrap());
 
-    let check: Check = client(api_key)
-        .delete(&url)
-        .send()
-        .map_err(|e| err(format!("request failed with {:?}", e)))?
-        .json()
-        .map_err(|e| err(e.to_string()))?;
+        let client = Client::builder()
+            .default_headers(headers)
+            .build()
+            .unwrap();
 
-    Ok(check)
-}
-
-pub fn ping_check(api_key: &str, check: &Check) -> Result<(), SimpleError> {
-    client(api_key)
-        .get(&check.ping_url)
-        .send()
-        .map_err(|e| err(format!("request failed with {:?}", e)))?;
-
-    Ok(())
-}
-
-pub fn pause_check(api_key: &str, check: &Check) -> Result<Check, SimpleError> {
-    let url = format!("{}{}/pause", BASE_URL, check.id());
-
-    let check: Check = client(api_key)
-        .post(&url)
-        .send()
-        .map_err(|e| err(format! ("request failed with {:?}", e)))?
-        .json()
-        .map_err(|e| err(e.to_string()))?;
-
-    Ok(check)
-}
-
-pub fn get_checks(api_key: &str, query: Option<&str>) -> Result<Vec<Check>, SimpleError> {
-    let v:  Value = client(api_key)
-        .get(BASE_URL)
-        .send()
-        .map_err(|e| err(format!("request failed with {:?}", e)))?
-        .json()
-        .map_err(|e| err(e.to_string()))?;
-
-    let ref checks_ref = Value::to_string(&v["checks"]);
-    let mut checks: Vec<Check> = serde_json::from_str(checks_ref)
-        .map_err(|e| err(format!("JSON: {}", e.to_string())))?;
-
-    if let Some(q) = query {
-        checks = checks.into_iter().filter(|c| c.name.contains(q) || c.id().contains(q)).collect();
+        ApiClient {
+            client: client,
+            base_url: base_url.parse().unwrap()
+        }
     }
 
-    for c in &mut checks {
-        c.fill_ids()
+    pub fn add(&self, name: &str, schedule: &str, grace: u32, tz: Option<&str>, tags: Option<&str>) -> Result<Check, SimpleError> {
+        let tz_val = tz.unwrap_or("UTC");
+        let tags_val = tags.unwrap_or("");
+
+        let c = json!({
+            "name":  name,
+            "schedule": schedule,
+            "grace": grace * 3600,
+            "tags": tags_val,
+            "tz": tz_val,
+            "unique": [ "name" ]
+        });
+
+        let check: Check = self.client
+            .post(&self.base_url)
+            .json(&c)
+            .send()
+            .map_err(|e| err(format!("request failed with {:?}", e)))?
+            .json()
+            .map_err(|e| err(e.to_string()))?;
+
+        Ok(check)
     }
 
-    Ok(checks)
-}
 
-pub fn find_check(api_key:  &str, id: &str) -> Option<Check> {
-    let re = get_checks(api_key, Some(id));
-    if re.is_err() {
-        println!("err {:?}", re);
-        return None
+    pub fn delete(&self, check: &Check) -> Result<Check, SimpleError> {
+        let url = format!("{}{}", self.base_url, check.id());
+
+        let check: Check = self.client
+            .delete(&url)
+            .send()
+            .map_err(|e| err(format!("request failed with {:?}", e)))?
+            .json()
+            .map_err(|e| err(e.to_string()))?;
+
+        Ok(check)
     }
 
-    let checks = re.unwrap();
-    if checks.len() == 0 {
-        println!("{}: check not found", id);
-        return None
+
+    pub fn ping(&self, check: &Check) -> Result<(), SimpleError> {
+        self.client
+            .get(&check.ping_url)
+            .send()
+            .map_err(|e| err(format!("request failed with {:?}", e)))?;
+
+        Ok(())
     }
 
-    Some((*checks.first().unwrap()).clone())
+
+    pub fn pause(&self, check: &Check) -> Result<Check, SimpleError> {
+        let url = format!("{}{}/pause", self.base_url, check.id());
+
+        let check: Check = self.client
+            .post(&url)
+            .send()
+            .map_err(|e| err(format! ("request failed with {:?}", e)))?
+            .json()
+            .map_err(|e| err(e.to_string()))?;
+
+        Ok(check)
+    }
+
+    pub fn get(&self, query: Option<&str>) -> Result<Vec<Check>, SimpleError> {
+        let v:  Value = self.client
+            .get(&self.base_url)
+            .send()
+            .map_err(|e| err(format!("request failed with {:?}", e)))?
+            .json()
+            .map_err(|e| err(e.to_string()))?;
+
+        let ref checks_ref = Value::to_string(&v["checks"]);
+        let mut checks: Vec<Check> = serde_json::from_str(checks_ref)
+            .map_err(|e| err(format!("JSON: {}", e.to_string())))?;
+
+        if let Some(q) = query {
+            checks = checks.into_iter().filter(|c| c.name.contains(q) || c.id().contains(q)).collect();
+        }
+
+        for c in &mut checks {
+            c.fill_ids()
+        }
+
+        Ok(checks)
+    }
+
+
+    pub fn find(&self, id: &str) -> Option<Check> {
+        let re = self.get(Some(id));
+        if re.is_err() {
+            println!("err {:?}", re);
+            return None
+        }
+
+        let checks = re.unwrap();
+        if checks.len() == 0 {
+            println!("{}: check not found", id);
+            return None
+        }
+
+        Some((*checks.first().unwrap()).clone())
+    }
 }

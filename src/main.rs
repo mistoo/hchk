@@ -20,6 +20,9 @@ use colored::*;
 use isatty::{stdout_isatty};
 
 mod api;
+use crate::api::ApiClient;
+
+const BASE_URL: &'static str = "https://healthchecks.io/api/v1/checks/";
 
 fn colored_status(status: &String) -> ColoredString {
     let c = match status.as_ref() {
@@ -39,8 +42,8 @@ struct LsFlags {
     long: bool
 }
 
-fn cmd_list_checks(api_key: &str, flags: &LsFlags, query: Option<&str>) {
-    let re = api::get_checks(api_key, query);
+fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) {
+    let re = client.get(query);
     if re.is_err() {
         println!("err {:?}", re);
         return
@@ -78,11 +81,11 @@ fn cmd_list_checks(api_key: &str, flags: &LsFlags, query: Option<&str>) {
     }
 }
 
-fn cmd_add_check(api_key: &str, name: Option<&str>, schedule: Option<&str>, grace: Option<&str>, tz: Option<&str>, tags: Option<&str>) {
+fn cmd_add_check(client: &ApiClient, name: Option<&str>, schedule: Option<&str>, grace: Option<&str>, tz: Option<&str>, tags: Option<&str>) {
     let grace_s = grace.unwrap_or("1");
     let grace_v = grace_s.parse::<u32>().unwrap_or(1);
 
-    let re = api::add_check(api_key, name.unwrap(), schedule.unwrap(), grace_v, tz, tags);
+    let re = client.add(name.unwrap(), schedule.unwrap(), grace_v, tz, tags);
     if re.is_err() {
         println!("err {:?}", re);
         return
@@ -92,8 +95,8 @@ fn cmd_add_check(api_key: &str, name: Option<&str>, schedule: Option<&str>, grac
     println!("{} {} {}", check.name, check.id(), check.ping_url)
 }
 
-fn cmd_pause_check(api_key: &str, id: Option<&str>) {
-    let re = api::find_check(api_key, id.unwrap());
+fn cmd_pause_check(client: &ApiClient, id: Option<&str>) {
+    let re = client.find(id.unwrap());
     if re.is_none() {
         return
     }
@@ -104,35 +107,35 @@ fn cmd_pause_check(api_key: &str, id: Option<&str>) {
         return
     }
 
-    let re = api::pause_check(api_key, &c);
+    let re = client.pause(&c);
     if re.is_err() {
         println!("err {:?}", re);
         return
     }
 }
 
-fn cmd_ping_check(api_key: &str, id: Option<&str>) {
-    let re = api::find_check(api_key, id.unwrap());
+fn cmd_ping_check(client: &ApiClient, id: Option<&str>) {
+    let re = client.find(id.unwrap());
     if re.is_none() {
         return
     }
 
     let c = re.unwrap();
-    let re = api::ping_check(api_key, &c);
+    let re = client.ping(&c);
     if re.is_err() {
         println!("err {:?}", re);
         return
     }
 }
 
-fn cmd_delete_check(api_key: &str, id: Option<&str>) {
-    let re = api::find_check(api_key, id.unwrap());
+fn cmd_delete_check(client: &ApiClient, id: Option<&str>) {
+    let re = client.find(id.unwrap());
     if re.is_none() {
         return
     }
 
     let c = re.unwrap();
-    let re = api::delete_check(api_key, &c);
+    let re = client.delete(&c);
     if re.is_err() {
         println!("err {:?}", re);
         return
@@ -150,7 +153,6 @@ fn keyfile_path() -> String {
 }
 
 fn cmd_setkey(key: Option<&str>) {
-    println!("setkey");
     let path = keyfile_path();
     let mut file = File::create(path).unwrap();
     file.write_all(key.unwrap().as_bytes()).unwrap();
@@ -193,21 +195,23 @@ fn run(cmd: Command, args: &clap::ArgMatches) {
         _ => get_api_key()
     };
 
+    let client = ApiClient::new(BASE_URL, &key);
+
     match cmd {
-        Command::List => cmd_list_checks(&key,
+        Command::List => cmd_list_checks(&client,
                                          &LsFlags{ long: args.is_present("long"),
                                                    up: args.is_present("up"),
                                                    down: args.is_present("down") },
                                          args.value_of("query")),
-        Command::Add => cmd_add_check(&key,
+        Command::Add => cmd_add_check(&client,
                                       args.value_of("name"),
                                       args.value_of("schedule"),
                                       args.value_of("grace"),
                                       args.value_of("tags"),
                                       args.value_of("tz")),
-        Command::Ping => cmd_ping_check(&key, args.value_of("id")),
-        Command::Pause => cmd_pause_check(&key, args.value_of("id")),
-        Command::Delete => cmd_delete_check(&key, args.value_of("id")),
+        Command::Ping => cmd_ping_check(&client, args.value_of("id")),
+        Command::Pause => cmd_pause_check(&client, args.value_of("id")),
+        Command::Delete => cmd_delete_check(&client, args.value_of("id")),
         Command::SetKey => cmd_setkey(args.value_of("key"))
     }
 }
