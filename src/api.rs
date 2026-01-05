@@ -97,7 +97,7 @@ impl Check {
 }
 
 const SECONDS_PER_HOUR: u32 = 3600;
-const HOURS_PER_YEAR: u32 = 24 * 365; // 8760 hours
+const HOURS_PER_YEAR: u32 = 24 * 365; // 8760 hours (365 days)
 
 fn err(msg: String) -> SimpleError {
     SimpleError::new(msg)
@@ -130,7 +130,7 @@ impl ApiClient {
             return Err(err("Check name cannot be empty".to_string()));
         }
         if grace < 1 || grace > HOURS_PER_YEAR {
-            return Err(err("Grace period must be between 1 hour and 1 year".to_string()));
+            return Err(err(format!("Grace period must be between 1 and {} hours (inclusive)", HOURS_PER_YEAR)));
         }
 
         let tz_val = tz.unwrap_or("UTC");
