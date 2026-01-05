@@ -25,17 +25,18 @@ pub struct Check {
     pub update_url: String
 }
 
-fn parse_datetime(ts: &Option<String>) -> DateTime<Local> {
+fn parse_datetime(ts: &Option<String>) -> Result<DateTime<Local>, SimpleError> {
     let local: DateTime<Local> = Local::now();
     let tz = local.timezone();
 
     if ts.is_none() {
-        return Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz)
+        return Ok(Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz))
     }
 
-    let ts = ts.clone().unwrap();
-    let dt = ts.parse::<DateTime<Utc>>().unwrap();
-    dt.with_timezone(&tz)
+    let ts = ts.as_ref().unwrap();
+    let dt = ts.parse::<DateTime<Utc>>()
+        .map_err(|e| err(format!("Failed to parse datetime: {}", e)))?;
+    Ok(dt.with_timezone(&tz))
 }
 
 fn humanize_datetime(dt: DateTime<Local>) -> String {
@@ -60,11 +61,20 @@ impl Check {
     }
 
     pub fn last_ping_at(&self) -> DateTime<Local> {
-        parse_datetime(&self.last_ping)
+        parse_datetime(&self.last_ping).unwrap_or_else(|_| {
+            let local: DateTime<Local> = Local::now();
+            let tz = local.timezone();
+            Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz)
+        })
     }
 
     pub fn humanized_last_ping_at(&self) -> String {
-        humanize_datetime(self.last_ping_at())
+        // Show "Never" for timestamps before 1950 (indicates never pinged)
+        let last_ping = self.last_ping_at();
+        if last_ping.year() < 1950 {
+            return "Never".to_string();
+        }
+        humanize_datetime(last_ping)
     }
 
     fn fill_ids(&mut self) {
@@ -74,14 +84,13 @@ impl Check {
 
     fn extract_id(&self) -> String {
         let e: Vec<&str> = self.ping_url.rsplitn(2, "/").collect();
-        let id = *e.first().unwrap();
-        String::from(id)
+        e.first().map(|&id| String::from(id)).unwrap_or_default()
     }
 
     fn extract_short_id(&self) -> String {
         let id = self.extract_id();
         let e: Vec<&str> = id.splitn(2, "-").collect();
-        String::from(*e.first().unwrap())
+        e.first().map(|&short| String::from(short)).unwrap_or_default()
     }
 }
 
@@ -113,6 +122,14 @@ impl ApiClient {
     }
 
     pub fn add(&self, name: &str, schedule: &str, grace: u32, tz: Option<&str>, tags: Option<&str>) -> Result<Check, SimpleError> {
+        // Validate inputs
+        if name.trim().is_empty() {
+            return Err(err("Check name cannot be empty".to_string()));
+        }
+        if grace == 0 || grace > 24 * 365 {
+            return Err(err("Grace period must be between 1 hour and 1 year".to_string()));
+        }
+
         let tz_val = tz.unwrap_or("UTC");
         let tags_val = tags.unwrap_or("");
 
