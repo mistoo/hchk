@@ -126,7 +126,7 @@ impl ApiClient {
         if name.trim().is_empty() {
             return Err(err("Check name cannot be empty".to_string()));
         }
-        if grace == 0 || grace > 24 * 365 {
+        if grace < 1 || grace > 24 * 365 {
             return Err(err("Grace period must be between 1 hour and 1 year".to_string()));
         }
 
@@ -216,18 +216,17 @@ impl ApiClient {
 
 
     pub fn find(&self, id: &str) -> Option<Check> {
-        let re = self.get(Some(id));
-        if re.is_err() {
-            println!("err {:?}", re);
+        let result = self.get(Some(id));
+        if result.is_err() {
+            eprintln!("Error: {:?}", result);
             return None
         }
 
-        let checks = re.unwrap();
-        if checks.len() == 0 {
-            println!("{}: check not found", id);
+        let checks = result.unwrap();
+        if checks.is_empty() {
             return None
         }
 
-        Some((*checks.first().unwrap()).clone())
+        checks.first().cloned()
     }
 }
