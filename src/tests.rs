@@ -280,7 +280,7 @@ mod api_tests {
     fn test_api_client_ping() {
         let mut server = Server::new();
         let ping_url = format!("{}/ping", server.url());
-        
+
         let mock = server
             .mock("GET", "/ping")
             .with_status(200)
@@ -500,7 +500,7 @@ mod api_tests {
         let server = Server::new();
         let client = ApiClient::new(&server.url(), "test-key");
         let result = client.add("", "0 * * * *", 1, None, None);
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("name cannot be empty"));
     }
@@ -510,7 +510,7 @@ mod api_tests {
         let server = Server::new();
         let client = ApiClient::new(&server.url(), "test-key");
         let result = client.add("test", "0 * * * *", 0, None, None);
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Grace period"));
     }
@@ -520,7 +520,7 @@ mod api_tests {
         let server = Server::new();
         let client = ApiClient::new(&server.url(), "test-key");
         let result = client.add("test", "0 * * * *", 24 * 366, None, None);
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Grace period"));
     }
@@ -546,7 +546,7 @@ mod api_tests {
         };
 
         let humanized = check.humanized_last_ping_at();
-        assert_eq!(humanized, "Never");
+        assert_eq!(humanized, "never");
     }
 
     #[test]

@@ -115,6 +115,7 @@ impl ApiClient {
 
         let client = Client::builder()
             .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .unwrap();
 
@@ -195,7 +196,7 @@ impl ApiClient {
     }
 
     pub fn get(&self, query: Option<&str>) -> Result<Vec<Check>, SimpleError> {
-        let v:  Value = self.client
+        let v: Value = self.client
             .get(&self.base_url)
             .send()
             .map_err(|e| err(format!("request failed with {:?}", e)))?
@@ -207,7 +208,7 @@ impl ApiClient {
             .map_err(|e| err(format!("JSON: {}", e.to_string())))?;
 
         if let Some(q) = query {
-            checks = checks.into_iter().filter(|c| c.name.contains(q) || c.id().contains(q)).collect();
+            checks.retain(|c| c.name.contains(q) || c.id().contains(q));
         }
 
         for c in &mut checks {

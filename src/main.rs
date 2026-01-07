@@ -131,10 +131,7 @@ fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) -> 
     Ok(())
 }
 
-fn cmd_add_check(client: &ApiClient, name: Option<&str>, schedule: Option<&str>, grace: Option<&str>, tz: Option<&str>, tags: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-    let name = name.ok_or("Name is required")?;
-    let schedule = schedule.ok_or("Schedule is required")?;
-
+fn cmd_add_check(client: &ApiClient, name: &str, schedule: &str, grace: Option<&str>, tz: Option<&str>, tags: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let grace_s = grace.unwrap_or("1");
     let grace_v = grace_s.parse::<u32>()
         .map_err(|_| format!("Grace period must be a valid number, got: {}", grace_s))?;
@@ -249,8 +246,8 @@ fn run(cmd: &Commands) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Add { name, schedule, grace, tz, tags } => {
             cmd_add_check(
                 &client,
-                Some(name),
-                Some(schedule),
+                name,
+                schedule,
                 grace.as_deref(),
                 tz.as_deref(),
                 tags.as_deref(),
