@@ -5,6 +5,7 @@ use simple_error::{SimpleError};
 use chrono::{DateTime, Utc, TimeZone};
 use chrono_humanize::HumanTime;
 use chrono::prelude::*;
+use std::sync::OnceLock;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Check {
@@ -22,7 +23,11 @@ pub struct Check {
     pub tz:  Option<String>,
     pub schedule: Option<String>,
     pub status: String,
-    pub update_url: String
+    pub update_url: String,
+    #[serde(skip)]
+    pub cached_id: OnceLock<String>,
+    #[serde(skip)]
+    pub cached_short_id: OnceLock<String>,
 }
 
 fn default_datetime() -> DateTime<Local> {
@@ -50,20 +55,16 @@ fn humanize_datetime(dt: DateTime<Local>) -> String {
 }
 
 impl Check {
-    pub fn id(&self) -> String {
-        if self.id.is_none() {
-            return self.extract_id()
-        }
-
-        (&self.id).as_ref().unwrap().to_string()
+    pub fn id(&self) -> &str {
+        self.cached_id.get_or_init(|| {
+            self.id.clone().unwrap_or_else(|| self.extract_id())
+        })
     }
 
-    pub fn short_id(&self) -> String {
-        if self.short_id.is_none() {
-            return self.extract_short_id()
-        }
-
-        (&self.short_id).as_ref().unwrap().to_string()
+    pub fn short_id(&self) -> &str {
+        self.cached_short_id.get_or_init(|| {
+            self.short_id.clone().unwrap_or_else(|| self.extract_short_id())
+        })
     }
 
     pub fn last_ping_at(&self) -> DateTime<Local> {
@@ -77,11 +78,6 @@ impl Check {
             return "never".to_string();
         }
         humanize_datetime(last_ping)
-    }
-
-    fn fill_ids(&mut self) {
-        self.id = Some(self.extract_id());
-        self.short_id = Some(self.extract_short_id())
     }
 
     fn extract_id(&self) -> String {
@@ -209,10 +205,6 @@ impl ApiClient {
 
         if let Some(q) = query {
             checks.retain(|c| c.name.contains(q) || c.id().contains(q));
-        }
-
-        for c in &mut checks {
-            c.fill_ids()
         }
 
         Ok(checks)

@@ -4,6 +4,7 @@ mod api_tests {
     use crate::api::*;
     use mockito::{Matcher, Server};
     use chrono::prelude::*;
+    use std::sync::OnceLock;
 
     fn sample_check_json() -> String {
         r#"{
@@ -45,6 +46,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         assert_eq!(check.id(), "abc123-def456");
@@ -68,6 +71,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         assert_eq!(check.short_id(), "abc123");
@@ -91,6 +96,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         assert_eq!(check.id(), "existing-id");
@@ -114,6 +121,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         assert_eq!(check.short_id(), "short");
@@ -137,6 +146,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         let last_ping = check.last_ping_at();
@@ -161,6 +172,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         let last_ping = check.last_ping_at();
@@ -187,6 +200,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         let humanized = check.humanized_last_ping_at();
@@ -269,6 +284,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         let result = client.delete(&check);
@@ -303,6 +320,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         let result = client.ping(&check);
@@ -353,6 +372,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         let result = client.pause(&check);
@@ -381,9 +402,9 @@ mod api_tests {
         let checks = result.unwrap();
         assert_eq!(checks.len(), 1);
         assert_eq!(checks[0].name, "test-check");
-        // Verify that fill_ids was called
-        assert!(checks[0].id.is_some());
-        assert!(checks[0].short_id.is_some());
+        // Verify that IDs are accessible (lazy initialization)
+        assert_eq!(checks[0].id(), "abc123-def456");
+        assert_eq!(checks[0].short_id(), "abc123");
     }
 
     #[test]
@@ -543,6 +564,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         let humanized = check.humanized_last_ping_at();
@@ -567,6 +590,8 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
         };
 
         // Should not panic with empty URL
