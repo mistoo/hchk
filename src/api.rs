@@ -128,8 +128,10 @@ impl ApiClient {
             .json(&c)
             .send()
             .map_err(|e| err(format!("request failed with {:?}", e)))?
+            .error_for_status()
+            .map_err(|e| err(format!("API error: {:?}", e)))?
             .json()
-            .map_err(|e| err(e.to_string()))?;
+            .map_err(|e| err(format!("Failed to parse response: {}", e)))?;
 
         check.set_short_uuid();
         Ok(check)
@@ -142,8 +144,10 @@ impl ApiClient {
             .delete(&url)
             .send()
             .map_err(|e| err(format!("request failed with {:?}", e)))?
+            .error_for_status()
+            .map_err(|e| err(format!("API error: {:?}", e)))?
             .json()
-            .map_err(|e| err(e.to_string()))?;
+            .map_err(|e| err(format!("Failed to parse response: {}", e)))?;
 
         check.set_short_uuid();
         Ok(check)
@@ -153,7 +157,9 @@ impl ApiClient {
         self.client
             .get(&check.ping_url)
             .send()
-            .map_err(|e| err(format!("request failed with {:?}", e)))?;
+            .map_err(|e| err(format!("request failed with {:?}", e)))?
+            .error_for_status()
+            .map_err(|e| err(format!("API error: {:?}", e)))?;
 
         Ok(())
     }
@@ -165,8 +171,10 @@ impl ApiClient {
             .post(&url)
             .send()
             .map_err(|e| err(format! ("request failed with {:?}", e)))?
+            .error_for_status()
+            .map_err(|e| err(format!("API error: {:?}", e)))?
             .json()
-            .map_err(|e| err(e.to_string()))?;
+            .map_err(|e| err(format!("Failed to parse response: {}", e)))?;
 
         check.set_short_uuid();
         Ok(check)
@@ -177,8 +185,10 @@ impl ApiClient {
             .get(&self.base_url)
             .send()
             .map_err(|e| err(format!("request failed with {:?}", e)))?
+            .error_for_status()
+            .map_err(|e| err(format!("API error: {:?}", e)))?
             .json()
-            .map_err(|e| err(e.to_string()))?;
+            .map_err(|e| err(format!("Failed to parse response: {}", e)))?;
 
         let ref checks_ref = Value::to_string(&v["checks"]);
         let mut checks: Vec<Check> = serde_json::from_str(checks_ref)

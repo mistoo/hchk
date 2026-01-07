@@ -496,4 +496,156 @@ mod api_tests {
         let humanized = check.humanized_last_ping_at();
         assert_eq!(humanized, "never");
     }
+
+    #[test]
+    fn test_api_client_add_unauthorized() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/")
+            .match_header("X-Api-Key", "test-key")
+            .with_status(401)
+            .with_body("Unauthorized")
+            .create();
+
+        let client = ApiClient::new("test-key", Some(&server.url()));
+        let result = client.add("test-check", "0 * * * *", 1, None, None);
+
+        mock.assert();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("API error"));
+    }
+
+    #[test]
+    fn test_api_client_delete_not_found() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("DELETE", "/abc123-def456")
+            .match_header("X-Api-Key", "test-key")
+            .with_status(404)
+            .with_body("Not Found")
+            .create();
+
+        let base_url = format!("{}/", server.url());
+        let client = ApiClient::new("test-key", Some(&base_url));
+        let check = Check {
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
+            name: "test-check".to_string(),
+            slug: "test".to_string(),
+            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
+            pause_url: "".to_string(),
+            last_ping: None,
+            next_ping: None,
+            grace: 3600,
+            n_pings: 0,
+            tags: "".to_string(),
+            timeout: None,
+            tz: None,
+            schedule: None,
+            status: "up".to_string(),
+            update_url: "".to_string(),
+        };
+
+        let result = client.delete(&check);
+        mock.assert();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("API error"));
+    }
+
+    #[test]
+    fn test_api_client_ping_server_error() {
+        let mut server = Server::new();
+        let ping_url = format!("{}/ping", server.url());
+
+        let mock = server
+            .mock("GET", "/ping")
+            .with_status(500)
+            .with_body("Internal Server Error")
+            .create();
+
+        let client = ApiClient::new("test-key", Some(&server.url()));
+        let check = Check {
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
+            name: "test-check".to_string(),
+            slug: "test".to_string(),
+            ping_url: ping_url,
+            pause_url: "".to_string(),
+            last_ping: None,
+            next_ping: None,
+            grace: 3600,
+            n_pings: 0,
+            tags: "".to_string(),
+            timeout: None,
+            tz: None,
+            schedule: None,
+            status: "up".to_string(),
+            update_url: "".to_string(),
+        };
+
+        let result = client.ping(&check);
+        mock.assert();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("API error"));
+    }
+
+    #[test]
+    fn test_api_client_pause_forbidden() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/abc123-def456/pause")
+            .match_header("X-Api-Key", "test-key")
+            .with_status(403)
+            .with_body("Forbidden")
+            .create();
+
+        let base_url = format!("{}/", server.url());
+        let client = ApiClient::new("test-key", Some(&base_url));
+        let check = Check {
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
+            name: "test-check".to_string(),
+            slug: "test".to_string(),
+            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
+            pause_url: "".to_string(),
+            last_ping: None,
+            next_ping: None,
+            grace: 3600,
+            n_pings: 0,
+            tags: "".to_string(),
+            timeout: None,
+            tz: None,
+            schedule: None,
+            status: "up".to_string(),
+            update_url: "".to_string(),
+        };
+
+        let result = client.pause(&check);
+        mock.assert();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("API error"));
+    }
+
+    #[test]
+    fn test_api_client_get_unauthorized() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/")
+            .match_header("X-Api-Key", "test-key")
+            .with_status(401)
+            .with_body("Unauthorized")
+            .create();
+
+        let client = ApiClient::new("test-key", Some(&server.url()));
+        let result = client.get(None);
+
+        mock.assert();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("API error"));
+    }
 }
