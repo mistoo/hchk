@@ -15,7 +15,7 @@ mod tests;
 
 /// healthchecks.io command line client
 #[derive(Parser, Debug)]
-#[command(name = "hchk", version = "0.1.0")]
+#[command(name = "hchk", version)]
 struct Cli {
     /// Be verbose
     #[arg(short = 'v', action = clap::ArgAction::Count)]
@@ -190,7 +190,7 @@ fn cmd_setkey(key: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
 
     let path = keyfile_path();
     let mut file = File::create(&path)?;
-    file.write_all(key.as_bytes())?;
+    file.write_all(key.trim().as_bytes())?;
 
     // Set file permissions to 0o600 (read/write for owner only) on Unix
     #[cfg(unix)]
@@ -213,7 +213,7 @@ fn get_api_key() -> Result<String, Box<dyn std::error::Error>> {
             let mut file = File::open(path)?;
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
-            return Ok(contents);
+            return Ok(contents.trim().to_string());
         }
     }
 
