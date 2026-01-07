@@ -3,9 +3,9 @@ use std::process;
 use std::fs::File;
 use std::path::Path;
 use std::io::prelude::*;
+use std::io::{self, IsTerminal};
 use clap::{Parser, Subcommand};
 use colored::*;
-use isatty::{stdout_isatty};
 
 mod api;
 use crate::api::ApiClient;
@@ -104,7 +104,7 @@ fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) -> 
         checks = checks.into_iter().filter(|c| (flags.down && c.status == "down") || (flags.up && c.status == "up")).collect();
     }
 
-    let tty = stdout_isatty();
+    let tty = io::stdout().is_terminal();
     if tty {
         println!("total {:?}", checks.len());
     }
@@ -134,20 +134,20 @@ fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) -> 
 fn cmd_add_check(client: &ApiClient, name: Option<&str>, schedule: Option<&str>, grace: Option<&str>, tz: Option<&str>, tags: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let name = name.ok_or("Name is required")?;
     let schedule = schedule.ok_or("Schedule is required")?;
-    
+
     let grace_s = grace.unwrap_or("1");
     let grace_v = grace_s.parse::<u32>()
         .map_err(|_| format!("Grace period must be a valid number, got: {}", grace_s))?;
 
     let check = client.add(name, schedule, grace_v, tz, tags)?;
     println!("{} {} {}", check.name, check.id(), check.ping_url);
-    
+
     Ok(())
 }
 
 fn cmd_pause_check(client: &ApiClient, id: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let id = id.ok_or("ID is required")?;
-    
+
     let c = client.find(id)
         .ok_or_else(|| format!("{}: check not found", id))?;
 
@@ -162,20 +162,20 @@ fn cmd_pause_check(client: &ApiClient, id: Option<&str>) -> Result<(), Box<dyn s
 
 fn cmd_ping_check(client: &ApiClient, id: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let id = id.ok_or("ID is required")?;
-    
+
     let c = client.find(id)
         .ok_or_else(|| format!("{}: check not found", id))?;
-    
+
     client.ping(&c)?;
     Ok(())
 }
 
 fn cmd_delete_check(client: &ApiClient, id: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let id = id.ok_or("ID is required")?;
-    
+
     let c = client.find(id)
         .ok_or_else(|| format!("{}: check not found", id))?;
-    
+
     client.delete(&c)?;
     Ok(())
 }
@@ -192,11 +192,11 @@ fn keyfile_path() -> String {
 
 fn cmd_setkey(key: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let key = key.ok_or("API key is required")?;
-    
+
     let path = keyfile_path();
     let mut file = File::create(&path)?;
     file.write_all(key.as_bytes())?;
-    
+
     // Set file permissions to 0o600 (read/write for owner only) on Unix
     #[cfg(unix)]
     {
@@ -204,7 +204,7 @@ fn cmd_setkey(key: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         let permissions = std::fs::Permissions::from_mode(0o600);
         std::fs::set_permissions(&path, permissions)?;
     }
-    
+
     Ok(())
 }
 
