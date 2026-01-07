@@ -71,10 +71,10 @@ impl Check {
     }
 
     pub fn humanized_last_ping_at(&self) -> String {
-        // Show "Never" for timestamps before 1950 (indicates never pinged)
+        // Show "never" for timestamps before 1950 (indicates never pinged)
         let last_ping = self.last_ping_at();
         if last_ping.year() < 1950 {
-            return "Never".to_string();
+            return "never".to_string();
         }
         humanize_datetime(last_ping)
     }
