@@ -7,7 +7,7 @@ use chrono_humanize::HumanTime;
 use chrono::prelude::*;
 use std::sync::OnceLock;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Check {
     pub id:  Option<String>,
     pub short_id: Option<String>,
@@ -28,6 +28,30 @@ pub struct Check {
     pub cached_id: OnceLock<String>,
     #[serde(skip)]
     pub cached_short_id: OnceLock<String>,
+}
+
+impl Clone for Check {
+    fn clone(&self) -> Self {
+        Check {
+            id: self.id.clone(),
+            short_id: self.short_id.clone(),
+            name: self.name.clone(),
+            ping_url: self.ping_url.clone(),
+            pause_url: self.pause_url.clone(),
+            last_ping: self.last_ping.clone(),
+            next_ping: self.next_ping.clone(),
+            grace: self.grace,
+            n_pings: self.n_pings,
+            tags: self.tags.clone(),
+            timeout: self.timeout,
+            tz: self.tz.clone(),
+            schedule: self.schedule.clone(),
+            status: self.status.clone(),
+            update_url: self.update_url.clone(),
+            cached_id: OnceLock::new(),
+            cached_short_id: OnceLock::new(),
+        }
+    }
 }
 
 fn default_datetime() -> DateTime<Local> {
