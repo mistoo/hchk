@@ -2,8 +2,8 @@
 #[cfg(test)]
 mod api_tests {
     use crate::api::*;
-    use mockito::{Matcher, Server};
     use chrono::prelude::*;
+    use mockito::{Matcher, Server};
 
     fn sample_check_json() -> String {
         r#"{
@@ -22,21 +22,21 @@ mod api_tests {
             "schedule": "0 * * * *",
             "status": "up",
             "update_url": "https://healthchecks.io/api/v1/checks/abc123-def456"
-        }"#.to_string()
+        }"#
+        .to_string()
     }
 
     fn sample_checks_response() -> String {
         format!(r#"{{"checks": [{}]}}"#, sample_check_json())
     }
 
-    #[test]
-    fn test_check_short_uuid() {
-        let mut check = Check {
-            uuid: "abc123-def456".to_string(),
+    fn create_test_check(uuid: &str) -> Check {
+        Check {
+            uuid: uuid.to_string(),
             short_uuid: "".to_string(),
             name: "test".to_string(),
             slug: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
+            ping_url: format!("https://hc-ping.com/{}", uuid),
             pause_url: "".to_string(),
             last_ping: None,
             next_ping: None,
@@ -48,7 +48,12 @@ mod api_tests {
             schedule: None,
             status: "up".to_string(),
             update_url: "".to_string(),
-        };
+        }
+    }
+
+    #[test]
+    fn test_check_short_uuid() {
+        let mut check = create_test_check("abc123-def456");
         check.set_short_uuid();
 
         assert_eq!(check.short_uuid, "abc123");
@@ -56,24 +61,8 @@ mod api_tests {
 
     #[test]
     fn test_check_last_ping_at() {
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test".to_string(),
-            slug: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: Some("2024-01-15T10:30:00+00:00".to_string()),
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let mut check = create_test_check("abc123-def456");
+        check.last_ping = Some("2024-01-15T10:30:00+00:00".to_string());
 
         let last_ping = check.last_ping_at();
         assert!(last_ping.year() >= 2024);
@@ -81,24 +70,7 @@ mod api_tests {
 
     #[test]
     fn test_check_last_ping_at_none() {
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test".to_string(),
-            slug: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let check = create_test_check("abc123-def456");
 
         let last_ping = check.last_ping_at();
         assert_eq!(last_ping.year(), 1901);
@@ -108,24 +80,8 @@ mod api_tests {
 
     #[test]
     fn test_check_humanized_last_ping_at() {
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test".to_string(),
-            slug: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: Some("2024-01-15T10:30:00+00:00".to_string()),
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let mut check = create_test_check("abc123-def456");
+        check.last_ping = Some("2024-01-15T10:30:00+00:00".to_string());
 
         let humanized = check.humanized_last_ping_at();
         assert!(humanized.len() > 0);
@@ -172,7 +128,13 @@ mod api_tests {
             .create();
 
         let client = ApiClient::new("test-key", Some(&server.url()));
-        let result = client.add("test-check", "0 * * * *", 2, Some("America/New_York"), Some("prod,critical"));
+        let result = client.add(
+            "test-check",
+            "0 * * * *",
+            2,
+            Some("America/New_York"),
+            Some("prod,critical"),
+        );
 
         mock.assert();
         assert!(result.is_ok());
@@ -191,24 +153,7 @@ mod api_tests {
 
         let base_url = format!("{}/", server.url());
         let client = ApiClient::new("test-key", Some(&base_url));
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test-check".to_string(),
-            slug: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let check = create_test_check("abc123-def456");
 
         let result = client.delete(&check);
         mock.assert();
@@ -220,31 +165,12 @@ mod api_tests {
         let mut server = Server::new();
         let ping_url = format!("{}/ping", server.url());
 
-        let mock = server
-            .mock("GET", "/ping")
-            .with_status(200)
-            .create();
+        let mock = server.mock("GET", "/ping").with_status(200).create();
 
         let client = ApiClient::new("test-key", Some(&server.url()));
         //let client = ApiClient::new(&server.url(), "test-key");
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test-check".to_string(),
-            slug: "test".to_string(),
-            ping_url: ping_url,
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let mut check = create_test_check("abc123-def456");
+        check.ping_url = ping_url;
 
         let result = client.ping(&check);
         mock.assert();
@@ -259,7 +185,8 @@ mod api_tests {
             .match_header("X-Api-Key", "test-key")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "uuid": "abc123-def456",
                 "name": "test-check",
                 "slug": "test-check",
@@ -275,30 +202,14 @@ mod api_tests {
                 "schedule": null,
                 "status": "paused",
                 "update_url": "https://healthchecks.io/api/v1/checks/abc123-def456"
-            }"#)
+            }"#,
+            )
             .create();
 
         let base_url = format!("{}/", server.url());
         let client = ApiClient::new("test-key", Some(&base_url));
         //let client = ApiClient::new(&base_url, "test-key");
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test-check".to_string(),
-            slug: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let check = create_test_check("abc123-def456");
 
         let result = client.pause(&check);
         mock.assert();
@@ -449,7 +360,12 @@ mod api_tests {
         let result = client.add("", "0 * * * *", 1, None, None);
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("name cannot be empty")
+        );
     }
 
     #[test]
@@ -474,24 +390,8 @@ mod api_tests {
 
     #[test]
     fn test_check_humanized_last_ping_never() {
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "abc123".to_string(),
-            slug: "test".to_string(),
-            name: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let mut check = create_test_check("abc123-def456");
+        check.short_uuid = "abc123".to_string();
 
         let humanized = check.humanized_last_ping_at();
         assert_eq!(humanized, "never");
@@ -528,24 +428,7 @@ mod api_tests {
 
         let base_url = format!("{}/", server.url());
         let client = ApiClient::new("test-key", Some(&base_url));
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test-check".to_string(),
-            slug: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let check = create_test_check("abc123-def456");
 
         let result = client.delete(&check);
         mock.assert();
@@ -566,24 +449,8 @@ mod api_tests {
             .create();
 
         let client = ApiClient::new("test-key", Some(&server.url()));
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test-check".to_string(),
-            slug: "test".to_string(),
-            ping_url: ping_url,
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let mut check = create_test_check("abc123-def456");
+        check.ping_url = ping_url;
 
         let result = client.ping(&check);
         mock.assert();
@@ -604,24 +471,7 @@ mod api_tests {
 
         let base_url = format!("{}/", server.url());
         let client = ApiClient::new("test-key", Some(&base_url));
-        let check = Check {
-            uuid: "abc123-def456".to_string(),
-            short_uuid: "".to_string(),
-            name: "test-check".to_string(),
-            slug: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
+        let check = create_test_check("abc123-def456");
 
         let result = client.pause(&check);
         mock.assert();
