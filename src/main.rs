@@ -27,16 +27,14 @@ mod tests;
 
 const BASE_URL: &'static str = "https://healthchecks.io/api/v1/checks/";
 
-fn colored_status(status: &String) -> ColoredString {
-    let c = match status.as_ref() {
-        "up" => "green",
-        "down" => "red",
-        "grace" => "cyan",
-        "paused" => "yellow",
-        _ => "white",
-    };
-
-    return status.color(c);
+fn colored_status(status: &str) -> ColoredString {
+    match status {
+        "up" => status.green(),
+        "down" => status.red(),
+        "grace" => status.cyan(),
+        "paused" => status.yellow(),
+        _ => status.white(),
+    }
 }
 
 struct LsFlags {
@@ -45,14 +43,10 @@ struct LsFlags {
     long: bool
 }
 
-fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) {
-    let re = client.get(query);
-    if re.is_err() {
-        println!("err {:?}", re);
-        return
-    }
+fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let result = client.get(query)?;
 
-    let mut checks = re.unwrap();
+    let mut checks = result;
 
     checks.sort_by(|a, b| a.name.cmp(&b.name));
     if flags.up || flags.down {
@@ -66,7 +60,7 @@ fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) {
 
     for c in checks {
         if flags.long {
-            println!("{}", serde_json::to_string_pretty(&c).unwrap());
+            println!("{}", serde_json::to_string_pretty(&c)?);
             continue
         }
 
@@ -82,67 +76,57 @@ fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) {
                  last_ping=c.humanized_last_ping_at(),
                  s_width=6, id_width=9, n_width=40, lp_width=30);
     }
+
+    Ok(())
 }
 
-fn cmd_add_check(client: &ApiClient, name: Option<&str>, schedule: Option<&str>, grace: Option<&str>, tz: Option<&str>, tags: Option<&str>) {
+fn cmd_add_check(client: &ApiClient, name: Option<&str>, schedule: Option<&str>, grace: Option<&str>, tz: Option<&str>, tags: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let name = name.ok_or("Name is required")?;
+    let schedule = schedule.ok_or("Schedule is required")?;
+    
     let grace_s = grace.unwrap_or("1");
-    let grace_v = grace_s.parse::<u32>().unwrap_or(1);
+    let grace_v = grace_s.parse::<u32>()
+        .map_err(|_| format!("Grace period must be a valid number, got: {}", grace_s))?;
 
-    let re = client.add(name.unwrap(), schedule.unwrap(), grace_v, tz, tags);
-    if re.is_err() {
-        println!("err {:?}", re);
-        return
-    }
-
-    let check = re.unwrap();
-    println!("{} {} {}", check.name, check.id(), check.ping_url)
+    let check = client.add(name, schedule, grace_v, tz, tags)?;
+    println!("{} {} {}", check.name, check.id(), check.ping_url);
+    
+    Ok(())
 }
 
-fn cmd_pause_check(client: &ApiClient, id: Option<&str>) {
-    let re = client.find(id.unwrap());
-    if re.is_none() {
-        return
-    }
+fn cmd_pause_check(client: &ApiClient, id: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let id = id.ok_or("ID is required")?;
+    
+    let c = client.find(id)
+        .ok_or_else(|| format!("{}: check not found", id))?;
 
-    let c = re.unwrap();
     if c.status == "paused" {
         println!("{}: check is already paused", c.name);
-        return
+        return Ok(());
     }
 
-    let re = client.pause(&c);
-    if re.is_err() {
-        println!("err {:?}", re);
-        return
-    }
+    client.pause(&c)?;
+    Ok(())
 }
 
-fn cmd_ping_check(client: &ApiClient, id: Option<&str>) {
-    let re = client.find(id.unwrap());
-    if re.is_none() {
-        return
-    }
-
-    let c = re.unwrap();
-    let re = client.ping(&c);
-    if re.is_err() {
-        println!("err {:?}", re);
-        return
-    }
+fn cmd_ping_check(client: &ApiClient, id: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let id = id.ok_or("ID is required")?;
+    
+    let c = client.find(id)
+        .ok_or_else(|| format!("{}: check not found", id))?;
+    
+    client.ping(&c)?;
+    Ok(())
 }
 
-fn cmd_delete_check(client: &ApiClient, id: Option<&str>) {
-    let re = client.find(id.unwrap());
-    if re.is_none() {
-        return
-    }
-
-    let c = re.unwrap();
-    let re = client.delete(&c);
-    if re.is_err() {
-        println!("err {:?}", re);
-        return
-    }
+fn cmd_delete_check(client: &ApiClient, id: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let id = id.ok_or("ID is required")?;
+    
+    let c = client.find(id)
+        .ok_or_else(|| format!("{}: check not found", id))?;
+    
+    client.delete(&c)?;
+    Ok(())
 }
 
 fn keyfile_path() -> String {
@@ -155,32 +139,43 @@ fn keyfile_path() -> String {
     home.unwrap() + "/.hchk"
 }
 
-fn cmd_setkey(key: Option<&str>) {
+fn cmd_setkey(key: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let key = key.ok_or("API key is required")?;
+    
     let path = keyfile_path();
-    let mut file = File::create(path).unwrap();
-    file.write_all(key.unwrap().as_bytes()).unwrap();
+    let mut file = File::create(&path)?;
+    file.write_all(key.as_bytes())?;
+    
+    // Set file permissions to 0o600 (read/write for owner only) on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let permissions = std::fs::Permissions::from_mode(0o600);
+        std::fs::set_permissions(&path, permissions)?;
+    }
+    
+    Ok(())
 }
 
 const API_KEY_ENV: &'static str = "HCHK_API_KEY";
-fn get_api_key() -> String {
+fn get_api_key() -> Result<String, Box<dyn std::error::Error>> {
     let key = env::var(API_KEY_ENV);
 
     if key.is_err() {
         let path = keyfile_path();
         if Path::new(&path).is_file() {
-            let file = File::open(path);
+            let mut file = File::open(path)?;
             let mut contents = String::new();
-            file.unwrap().read_to_string(&mut contents).unwrap();
-            return contents
+            file.read_to_string(&mut contents)?;
+            return Ok(contents);
         }
     }
 
     if key.is_err() {
-        println!("use setkey command or set {} environment variable", API_KEY_ENV);
-        process::exit(1);
+        return Err(format!("Use setkey command or set {} environment variable", API_KEY_ENV).into());
     }
 
-    key.unwrap()
+    Ok(key.unwrap())
 }
 
 enum Command {
@@ -192,10 +187,10 @@ enum Command {
     SetKey
 }
 
-fn run(cmd: Command, args: &clap::ArgMatches) {
+fn run(cmd: Command, args: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     let key = match cmd {
         Command::SetKey => "".to_string(),
-        _ => get_api_key()
+        _ => get_api_key()?
     };
 
     let client = ApiClient::new(BASE_URL, &key);
@@ -210,8 +205,8 @@ fn run(cmd: Command, args: &clap::ArgMatches) {
                                       args.value_of("name"),
                                       args.value_of("schedule"),
                                       args.value_of("grace"),
-                                      args.value_of("tags"),
-                                      args.value_of("tz")),
+                                      args.value_of("tz"),
+                                      args.value_of("tags")),
         Command::Ping => cmd_ping_check(&client, args.value_of("id")),
         Command::Pause => cmd_pause_check(&client, args.value_of("id")),
         Command::Delete => cmd_delete_check(&client, args.value_of("id")),
@@ -250,7 +245,7 @@ fn main() {
 
     // You can handle information about subcommands by requesting their matches by name
     // (as below), requesting just the name used, or both at the same time
-    if let Some(matches) = matches.subcommand_matches("setkey") {
+    let result = if let Some(matches) = matches.subcommand_matches("setkey") {
         run(Command::SetKey, matches)
     } else if let Some(matches) = matches.subcommand_matches("ls") {
         run(Command::List, matches)
@@ -262,5 +257,12 @@ fn main() {
         run(Command::Ping, matches)
     } else if let Some(matches) = matches.subcommand_matches("del") {
         run(Command::Delete, matches)
+    } else {
+        Ok(())
+    };
+
+    if let Err(e) = result {
+        eprintln!("Error: {}", e);
+        process::exit(1);
     }
 }

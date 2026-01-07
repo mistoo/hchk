@@ -25,17 +25,24 @@ pub struct Check {
     pub update_url: String
 }
 
-fn parse_datetime(ts: &Option<String>) -> DateTime<Local> {
+fn default_datetime() -> DateTime<Local> {
+    let local: DateTime<Local> = Local::now();
+    let tz = local.timezone();
+    Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz)
+}
+
+fn parse_datetime(ts: &Option<String>) -> Result<DateTime<Local>, SimpleError> {
     let local: DateTime<Local> = Local::now();
     let tz = local.timezone();
 
     if ts.is_none() {
-        return Utc.with_ymd_and_hms(1901, 01, 01, 0, 0, 0).unwrap().with_timezone(&tz)
+        return Ok(default_datetime())
     }
 
-    let ts = ts.clone().unwrap();
-    let dt = ts.parse::<DateTime<Utc>>().unwrap();
-    dt.with_timezone(&tz)
+    let ts = ts.as_ref().unwrap();
+    let dt = ts.parse::<DateTime<Utc>>()
+        .map_err(|e| err(format!("Failed to parse datetime: {}", e)))?;
+    Ok(dt.with_timezone(&tz))
 }
 
 fn humanize_datetime(dt: DateTime<Local>) -> String {
@@ -60,11 +67,16 @@ impl Check {
     }
 
     pub fn last_ping_at(&self) -> DateTime<Local> {
-        parse_datetime(&self.last_ping)
+        parse_datetime(&self.last_ping).unwrap_or_else(|_| default_datetime())
     }
 
     pub fn humanized_last_ping_at(&self) -> String {
-        humanize_datetime(self.last_ping_at())
+        // Show "Never" for timestamps before 1950 (indicates never pinged)
+        let last_ping = self.last_ping_at();
+        if last_ping.year() < 1950 {
+            return "Never".to_string();
+        }
+        humanize_datetime(last_ping)
     }
 
     fn fill_ids(&mut self) {
@@ -74,18 +86,18 @@ impl Check {
 
     fn extract_id(&self) -> String {
         let e: Vec<&str> = self.ping_url.rsplitn(2, "/").collect();
-        let id = *e.first().unwrap();
-        String::from(id)
+        e.first().map(|&id| String::from(id)).unwrap_or_default()
     }
 
     fn extract_short_id(&self) -> String {
         let id = self.extract_id();
         let e: Vec<&str> = id.splitn(2, "-").collect();
-        String::from(*e.first().unwrap())
+        e.first().map(|&short| String::from(short)).unwrap_or_default()
     }
 }
 
-//const BASE_URL:  &'static str = "https://healthchecks.io/api/v1/checks/";
+const SECONDS_PER_HOUR: u32 = 3600;
+const HOURS_PER_YEAR: u32 = 24 * 365; // 8760 hours (365 days)
 
 fn err(msg: String) -> SimpleError {
     SimpleError::new(msg)
@@ -113,13 +125,21 @@ impl ApiClient {
     }
 
     pub fn add(&self, name: &str, schedule: &str, grace: u32, tz: Option<&str>, tags: Option<&str>) -> Result<Check, SimpleError> {
+        // Validate inputs
+        if name.trim().is_empty() {
+            return Err(err("Check name cannot be empty".to_string()));
+        }
+        if grace < 1 || grace > HOURS_PER_YEAR {
+            return Err(err(format!("Grace period must be between 1 and {} hours (inclusive)", HOURS_PER_YEAR)));
+        }
+
         let tz_val = tz.unwrap_or("UTC");
         let tags_val = tags.unwrap_or("");
 
         let c = json!({
             "name":  name,
             "schedule": schedule,
-            "grace": grace * 3600,
+            "grace": grace * SECONDS_PER_HOUR,
             "tags": tags_val,
             "tz": tz_val,
             "unique": [ "name" ]
@@ -199,18 +219,17 @@ impl ApiClient {
 
 
     pub fn find(&self, id: &str) -> Option<Check> {
-        let re = self.get(Some(id));
-        if re.is_err() {
-            println!("err {:?}", re);
+        let result = self.get(Some(id));
+        if result.is_err() {
+            eprintln!("Error: {:?}", result);
             return None
         }
 
-        let checks = re.unwrap();
-        if checks.len() == 0 {
-            println!("{}: check not found", id);
+        let checks = result.unwrap();
+        if checks.is_empty() {
             return None
         }
 
-        Some((*checks.first().unwrap()).clone())
+        checks.first().cloned()
     }
 }

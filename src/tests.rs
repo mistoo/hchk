@@ -494,4 +494,83 @@ mod api_tests {
         mock.assert();
         assert!(result.is_none());
     }
+
+    #[test]
+    fn test_api_client_add_empty_name() {
+        let server = Server::new();
+        let client = ApiClient::new(&server.url(), "test-key");
+        let result = client.add("", "0 * * * *", 1, None, None);
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("name cannot be empty"));
+    }
+
+    #[test]
+    fn test_api_client_add_invalid_grace_zero() {
+        let server = Server::new();
+        let client = ApiClient::new(&server.url(), "test-key");
+        let result = client.add("test", "0 * * * *", 0, None, None);
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Grace period"));
+    }
+
+    #[test]
+    fn test_api_client_add_invalid_grace_too_large() {
+        let server = Server::new();
+        let client = ApiClient::new(&server.url(), "test-key");
+        let result = client.add("test", "0 * * * *", 24 * 366, None, None);
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Grace period"));
+    }
+
+    #[test]
+    fn test_check_humanized_last_ping_never() {
+        let check = Check {
+            id: None,
+            short_id: None,
+            name: "test".to_string(),
+            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
+            pause_url: "".to_string(),
+            last_ping: None,
+            next_ping: None,
+            grace: 3600,
+            n_pings: 0,
+            tags: "".to_string(),
+            timeout: None,
+            tz: None,
+            schedule: None,
+            status: "up".to_string(),
+            update_url: "".to_string(),
+        };
+
+        let humanized = check.humanized_last_ping_at();
+        assert_eq!(humanized, "Never");
+    }
+
+    #[test]
+    fn test_check_extract_id_empty_url() {
+        let check = Check {
+            id: None,
+            short_id: None,
+            name: "test".to_string(),
+            ping_url: "".to_string(),
+            pause_url: "".to_string(),
+            last_ping: None,
+            next_ping: None,
+            grace: 3600,
+            n_pings: 0,
+            tags: "".to_string(),
+            timeout: None,
+            tz: None,
+            schedule: None,
+            status: "up".to_string(),
+            update_url: "".to_string(),
+        };
+
+        // Should not panic with empty URL
+        let id = check.id();
+        assert_eq!(id, "");
+    }
 }
