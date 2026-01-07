@@ -3,7 +3,7 @@ use std::process;
 use std::fs::File;
 use std::path::Path;
 use std::io::prelude::*;
-use clap::{Arg, App, SubCommand};
+use clap::{Parser, Subcommand};
 use colored::*;
 use isatty::{stdout_isatty};
 
@@ -14,6 +14,69 @@ use crate::api::ApiClient;
 mod tests;
 
 const BASE_URL: &str = "https://healthchecks.io/api/v1/checks/";
+
+/// healthchecks.io command line client
+#[derive(Parser, Debug)]
+#[command(name = "hchk", version = "0.1.0")]
+struct Cli {
+    /// Be verbose
+    #[arg(short = 'v', action = clap::ArgAction::Count)]
+    verbose: u8,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Save API key to $HOME/.hchk
+    Setkey {
+        /// API key
+        key: Option<String>,
+    },
+    /// List checks
+    Ls {
+        /// Long listing
+        #[arg(short = 'l')]
+        long: bool,
+        /// List 'up' only checks
+        #[arg(short = 'u')]
+        up: bool,
+        /// List 'down' only checks
+        #[arg(short = 'd')]
+        down: bool,
+        /// Filter by name/id
+        query: Option<String>,
+    },
+    /// Add check
+    Add {
+        /// Name
+        name: String,
+        /// Schedule in cron format
+        schedule: String,
+        /// Grace in hours
+        grace: Option<String>,
+        /// Timezone
+        tz: Option<String>,
+        /// Tags
+        tags: Option<String>,
+    },
+    /// Delete check
+    Del {
+        /// Check's ID to delete
+        id: String,
+    },
+    /// Pause check
+    Pause {
+        /// Check's ID to pause
+        id: String,
+    },
+    /// Ping check
+    Ping {
+        /// Check's ID to ping
+        id: String,
+    },
+}
 
 fn colored_status(status: &str) -> ColoredString {
     match status {
@@ -166,85 +229,46 @@ fn get_api_key() -> Result<String, Box<dyn std::error::Error>> {
     Ok(key.unwrap())
 }
 
-enum Command {
-    List,
-    Add,
-    Delete,
-    Pause,
-    Ping,
-    SetKey
-}
-
-fn run(cmd: Command, args: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+fn run(cmd: &Commands) -> Result<(), Box<dyn std::error::Error>> {
     let key = match cmd {
-        Command::SetKey => "".to_string(),
+        Commands::Setkey { .. } => "".to_string(),
         _ => get_api_key()?
     };
 
     let client = ApiClient::new(BASE_URL, &key);
 
     match cmd {
-        Command::List => cmd_list_checks(&client,
-                                         &LsFlags{ long: args.is_present("long"),
-                                                   up: args.is_present("up"),
-                                                   down: args.is_present("down") },
-                                         args.value_of("query")),
-        Command::Add => cmd_add_check(&client,
-                                      args.value_of("name"),
-                                      args.value_of("schedule"),
-                                      args.value_of("grace"),
-                                      args.value_of("tz"),
-                                      args.value_of("tags")),
-        Command::Ping => cmd_ping_check(&client, args.value_of("id")),
-        Command::Pause => cmd_pause_check(&client, args.value_of("id")),
-        Command::Delete => cmd_delete_check(&client, args.value_of("id")),
-        Command::SetKey => cmd_setkey(args.value_of("key"))
+        Commands::Ls { long, up, down, query } => {
+            let flags = LsFlags {
+                long: *long,
+                up: *up,
+                down: *down,
+            };
+            cmd_list_checks(&client, &flags, query.as_deref())
+        }
+        Commands::Add { name, schedule, grace, tz, tags } => {
+            cmd_add_check(
+                &client,
+                Some(name),
+                Some(schedule),
+                grace.as_deref(),
+                tz.as_deref(),
+                tags.as_deref(),
+            )
+        }
+        Commands::Ping { id } => cmd_ping_check(&client, Some(id)),
+        Commands::Pause { id } => cmd_pause_check(&client, Some(id)),
+        Commands::Del { id } => cmd_delete_check(&client, Some(id)),
+        Commands::Setkey { key } => cmd_setkey(key.as_deref()),
     }
 }
 
 fn main() {
-    let matches = App::new("hchk")
-        .version("0.1.0")
-        .arg(Arg::with_name("v")
-             .short("v")
-             .multiple(true)
-             .help("be verbose"))
-        .subcommand(SubCommand::with_name("setkey").about("Save API key to $HOME/.hchk")
-                    .arg(Arg::with_name("key").help("API key")))
-        .subcommand(SubCommand::with_name("ls").about("List checks")
-                    .arg(Arg::with_name("long").short("l").help("long listing"))
-                    .arg(Arg::with_name("up").short("u").help("list 'up' only checks"))
-                    .arg(Arg::with_name("down").short("d").help("list 'down' only checks"))
-                    .arg(Arg::with_name("query").help("filter by name/id")))
-        .subcommand(SubCommand::with_name("pause").about("Pause check")
-                    .arg(Arg::with_name("id").help("check's ID to pause").required(true)))
-        .subcommand(SubCommand::with_name("ping").about("Ping check")
-                    .arg(Arg::with_name("id").help("check's ID to ping").required(true)))
-        .subcommand(SubCommand::with_name("del").about("Delete check")
-                    .arg(Arg::with_name("id").help("check's ID to delete").required(true)))
-        .subcommand(SubCommand::with_name("add").about("Add check")
-                    .arg(Arg::with_name("name").help("name").required(true))
-                    .arg(Arg::with_name("schedule").help("schedule in cron format").required(true))
-                    .arg(Arg::with_name("grace").help("grace in hours"))
-                    .arg(Arg::with_name("tz").help("timezone"))
-                    .arg(Arg::with_name("tags").help("tags")))
+    let cli = Cli::parse();
 
-        .get_matches();
-
-    // You can handle information about subcommands by requesting their matches by name
-    // (as below), requesting just the name used, or both at the same time
-    let result = if let Some(matches) = matches.subcommand_matches("setkey") {
-        run(Command::SetKey, matches)
-    } else if let Some(matches) = matches.subcommand_matches("ls") {
-        run(Command::List, matches)
-    } else if let Some(matches) = matches.subcommand_matches("add") {
-        run(Command::Add, matches)
-    } else if let Some(matches) = matches.subcommand_matches("pause") {
-        run(Command::Pause, matches)
-    } else if let Some(matches) = matches.subcommand_matches("ping") {
-        run(Command::Ping, matches)
-    } else if let Some(matches) = matches.subcommand_matches("del") {
-        run(Command::Delete, matches)
+    // Handle the subcommand if present
+    let result = if let Some(command) = &cli.command {
+        run(command)
     } else {
         Ok(())
     };
