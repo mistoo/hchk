@@ -2,13 +2,12 @@
 name = "hchk"
 version = "0.1.0"
 authors = ["mis <mis@pld-linux.org>"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 simple-error = "0.1"
 clap = "2.32.0"
-serde = "1.0.70"
-serde_derive = "1.0.70"
+serde = { version = "1.0.70", features = ["derive"] }
 serde_json = "1.0.24"
 chrono = "0.4.5"
 chrono-tz = "0.5"
