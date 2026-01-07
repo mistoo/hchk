@@ -1,8 +1,7 @@
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{self, json};
+use serde_json::{self, json, Value};
 use simple_error::{SimpleError};
-use serde_json::{Value};
 use chrono::{DateTime, Utc, TimeZone};
 use chrono_humanize::HumanTime;
 use chrono::prelude::*;
