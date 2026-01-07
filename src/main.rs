@@ -1,15 +1,3 @@
-extern crate simple_error;
-extern crate chrono;
-extern crate chrono_tz;
-extern crate chrono_humanize;
-extern crate serde;
-#[macro_use] extern crate serde_json;
-#[macro_use] extern crate serde_derive;
-
-extern crate clap;
-extern crate colored;
-extern crate isatty;
-
 use std::env;
 use std::process;
 use std::fs::File;
@@ -25,7 +13,7 @@ use crate::api::ApiClient;
 #[cfg(test)]
 mod tests;
 
-const BASE_URL: &'static str = "https://healthchecks.io/api/v1/checks/";
+const BASE_URL: &str = "https://healthchecks.io/api/v1/checks/";
 
 fn colored_status(status: &str) -> ColoredString {
     match status {
@@ -157,7 +145,7 @@ fn cmd_setkey(key: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-const API_KEY_ENV: &'static str = "HCHK_API_KEY";
+const API_KEY_ENV: &str = "HCHK_API_KEY";
 fn get_api_key() -> Result<String, Box<dyn std::error::Error>> {
     let key = env::var(API_KEY_ENV);
 
