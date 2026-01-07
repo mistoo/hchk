@@ -13,8 +13,6 @@ use crate::api::ApiClient;
 #[cfg(test)]
 mod tests;
 
-const BASE_URL: &str = "https://healthchecks.io/api/v1/checks/";
-
 /// healthchecks.io command line client
 #[derive(Parser, Debug)]
 #[command(name = "hchk", version = "0.1.0")]
@@ -123,7 +121,7 @@ fn cmd_list_checks(client: &ApiClient, flags: &LsFlags, query: Option<&str>) -> 
         println!("{status:<s_width$} {id:<id_width$} {name:<n_width$} {last_ping:<lp_width$}",
                  name=c.name,
                  status=status,
-                 id=c.short_id(),
+                 id=c.short_uuid,
                  last_ping=c.humanized_last_ping_at(),
                  s_width=6, id_width=9, n_width=40, lp_width=30);
     }
@@ -137,7 +135,7 @@ fn cmd_add_check(client: &ApiClient, name: &str, schedule: &str, grace: Option<&
         .map_err(|_| format!("Grace period must be a valid number, got: {}", grace_s))?;
 
     let check = client.add(name, schedule, grace_v, tz, tags)?;
-    println!("{} {} {}", check.name, check.id(), check.ping_url);
+    println!("{} {} {}", check.name, check.uuid, check.ping_url);
 
     Ok(())
 }
@@ -232,7 +230,7 @@ fn run(cmd: &Commands) -> Result<(), Box<dyn std::error::Error>> {
         _ => get_api_key()?
     };
 
-    let client = ApiClient::new(BASE_URL, &key);
+    let client = ApiClient::new(&key, None);
 
     match cmd {
         Commands::Ls { long, up, down, query } => {

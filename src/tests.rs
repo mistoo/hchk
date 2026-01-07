@@ -7,6 +7,8 @@ mod api_tests {
 
     fn sample_check_json() -> String {
         r#"{
+            "uuid": "abc123-def456",
+            "slug": "test-check",
             "name": "test-check",
             "ping_url": "https://hc-ping.com/abc123-def456",
             "pause_url": "https://healthchecks.io/api/v1/checks/abc123-def456/pause",
@@ -28,11 +30,12 @@ mod api_tests {
     }
 
     #[test]
-    fn test_check_extract_id() {
-        let check = Check {
-            id: None,
-            short_id: None,
+    fn test_check_short_uuid() {
+        let mut check = Check {
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
             name: "test".to_string(),
+            slug: "test".to_string(),
             ping_url: "https://hc-ping.com/abc123-def456".to_string(),
             pause_url: "".to_string(),
             last_ping: None,
@@ -46,85 +49,18 @@ mod api_tests {
             status: "up".to_string(),
             update_url: "".to_string(),
         };
+        check.set_short_uuid();
 
-        assert_eq!(check.id(), "abc123-def456");
-    }
-
-    #[test]
-    fn test_check_extract_short_id() {
-        let check = Check {
-            id: None,
-            short_id: None,
-            name: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
-
-        assert_eq!(check.short_id(), "abc123");
-    }
-
-    #[test]
-    fn test_check_id_when_already_set() {
-        let check = Check {
-            id: Some("existing-id".to_string()),
-            short_id: None,
-            name: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
-
-        assert_eq!(check.id(), "existing-id");
-    }
-
-    #[test]
-    fn test_check_short_id_when_already_set() {
-        let check = Check {
-            id: None,
-            short_id: Some("short".to_string()),
-            name: "test".to_string(),
-            ping_url: "https://hc-ping.com/abc123-def456".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
-
-        assert_eq!(check.short_id(), "short");
+        assert_eq!(check.short_uuid, "abc123");
     }
 
     #[test]
     fn test_check_last_ping_at() {
         let check = Check {
-            id: None,
-            short_id: None,
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
             name: "test".to_string(),
+            slug: "test".to_string(),
             ping_url: "https://hc-ping.com/abc123-def456".to_string(),
             pause_url: "".to_string(),
             last_ping: Some("2024-01-15T10:30:00+00:00".to_string()),
@@ -146,9 +82,10 @@ mod api_tests {
     #[test]
     fn test_check_last_ping_at_none() {
         let check = Check {
-            id: None,
-            short_id: None,
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
             name: "test".to_string(),
+            slug: "test".to_string(),
             ping_url: "https://hc-ping.com/abc123-def456".to_string(),
             pause_url: "".to_string(),
             last_ping: None,
@@ -172,9 +109,10 @@ mod api_tests {
     #[test]
     fn test_check_humanized_last_ping_at() {
         let check = Check {
-            id: None,
-            short_id: None,
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
             name: "test".to_string(),
+            slug: "test".to_string(),
             ping_url: "https://hc-ping.com/abc123-def456".to_string(),
             pause_url: "".to_string(),
             last_ping: Some("2024-01-15T10:30:00+00:00".to_string()),
@@ -195,7 +133,7 @@ mod api_tests {
 
     #[test]
     fn test_api_client_new() {
-        let client = ApiClient::new("https://example.com/api/", "test-api-key");
+        let client = ApiClient::new("test-key", Some("https://example.com/api/"));
         assert_eq!(client.base_url, "https://example.com/api/");
     }
 
@@ -211,7 +149,7 @@ mod api_tests {
             .with_body(sample_check_json())
             .create();
 
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.add("test-check", "0 * * * *", 1, None, None);
 
         mock.assert();
@@ -233,7 +171,7 @@ mod api_tests {
             .with_body(sample_check_json())
             .create();
 
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.add("test-check", "0 * * * *", 2, Some("America/New_York"), Some("prod,critical"));
 
         mock.assert();
@@ -252,11 +190,12 @@ mod api_tests {
             .create();
 
         let base_url = format!("{}/", server.url());
-        let client = ApiClient::new(&base_url, "test-key");
+        let client = ApiClient::new("test-key", Some(&base_url));
         let check = Check {
-            id: Some("abc123-def456".to_string()),
-            short_id: Some("abc123".to_string()),
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
             name: "test-check".to_string(),
+            slug: "test".to_string(),
             ping_url: "https://hc-ping.com/abc123-def456".to_string(),
             pause_url: "".to_string(),
             last_ping: None,
@@ -286,11 +225,13 @@ mod api_tests {
             .with_status(200)
             .create();
 
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
+        //let client = ApiClient::new(&server.url(), "test-key");
         let check = Check {
-            id: Some("abc123-def456".to_string()),
-            short_id: Some("abc123".to_string()),
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
             name: "test-check".to_string(),
+            slug: "test".to_string(),
             ping_url: ping_url,
             pause_url: "".to_string(),
             last_ping: None,
@@ -319,7 +260,9 @@ mod api_tests {
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{
+                "uuid": "abc123-def456",
                 "name": "test-check",
+                "slug": "test-check",
                 "ping_url": "https://hc-ping.com/abc123-def456",
                 "pause_url": "https://healthchecks.io/api/v1/checks/abc123-def456/pause",
                 "last_ping": null,
@@ -336,11 +279,13 @@ mod api_tests {
             .create();
 
         let base_url = format!("{}/", server.url());
-        let client = ApiClient::new(&base_url, "test-key");
+        let client = ApiClient::new("test-key", Some(&base_url));
+        //let client = ApiClient::new(&base_url, "test-key");
         let check = Check {
-            id: Some("abc123-def456".to_string()),
-            short_id: Some("abc123".to_string()),
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "".to_string(),
             name: "test-check".to_string(),
+            slug: "test".to_string(),
             ping_url: "https://hc-ping.com/abc123-def456".to_string(),
             pause_url: "".to_string(),
             last_ping: None,
@@ -373,7 +318,7 @@ mod api_tests {
             .with_body(sample_checks_response())
             .create();
 
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.get(None);
 
         mock.assert();
@@ -381,9 +326,7 @@ mod api_tests {
         let checks = result.unwrap();
         assert_eq!(checks.len(), 1);
         assert_eq!(checks[0].name, "test-check");
-        // Verify that fill_ids was called
-        assert!(checks[0].id.is_some());
-        assert!(checks[0].short_id.is_some());
+        assert_eq!(checks[0].short_uuid, "abc123");
     }
 
     #[test]
@@ -391,7 +334,9 @@ mod api_tests {
         let mut server = Server::new();
         let response = r#"{"checks": [
             {
+                "uuid": "abc123-def456",
                 "name": "test-check-1",
+                "slug": "test-check-1",
                 "ping_url": "https://hc-ping.com/abc123-def456",
                 "pause_url": "",
                 "last_ping": null,
@@ -406,7 +351,9 @@ mod api_tests {
                 "update_url": ""
             },
             {
+                "uuid": "xyz789-ghi012",
                 "name": "other-check",
+                "slug": "other-check",
                 "ping_url": "https://hc-ping.com/xyz789-ghi012",
                 "pause_url": "",
                 "last_ping": null,
@@ -430,7 +377,7 @@ mod api_tests {
             .with_body(response)
             .create();
 
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.get(Some("test"));
 
         mock.assert();
@@ -452,7 +399,7 @@ mod api_tests {
             .with_body(sample_checks_response())
             .create();
 
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.find("test-check");
 
         mock.assert();
@@ -472,7 +419,7 @@ mod api_tests {
             .with_body(r#"{"checks": []}"#)
             .create();
 
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.find("nonexistent");
 
         mock.assert();
@@ -488,7 +435,7 @@ mod api_tests {
             .with_status(500)
             .create();
 
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.find("test");
 
         mock.assert();
@@ -498,7 +445,7 @@ mod api_tests {
     #[test]
     fn test_api_client_add_empty_name() {
         let server = Server::new();
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.add("", "0 * * * *", 1, None, None);
 
         assert!(result.is_err());
@@ -508,7 +455,7 @@ mod api_tests {
     #[test]
     fn test_api_client_add_invalid_grace_zero() {
         let server = Server::new();
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.add("test", "0 * * * *", 0, None, None);
 
         assert!(result.is_err());
@@ -518,7 +465,7 @@ mod api_tests {
     #[test]
     fn test_api_client_add_invalid_grace_too_large() {
         let server = Server::new();
-        let client = ApiClient::new(&server.url(), "test-key");
+        let client = ApiClient::new("test-key", Some(&server.url()));
         let result = client.add("test", "0 * * * *", 24 * 366, None, None);
 
         assert!(result.is_err());
@@ -528,8 +475,9 @@ mod api_tests {
     #[test]
     fn test_check_humanized_last_ping_never() {
         let check = Check {
-            id: None,
-            short_id: None,
+            uuid: "abc123-def456".to_string(),
+            short_uuid: "abc123".to_string(),
+            slug: "test".to_string(),
             name: "test".to_string(),
             ping_url: "https://hc-ping.com/abc123-def456".to_string(),
             pause_url: "".to_string(),
@@ -547,30 +495,5 @@ mod api_tests {
 
         let humanized = check.humanized_last_ping_at();
         assert_eq!(humanized, "never");
-    }
-
-    #[test]
-    fn test_check_extract_id_empty_url() {
-        let check = Check {
-            id: None,
-            short_id: None,
-            name: "test".to_string(),
-            ping_url: "".to_string(),
-            pause_url: "".to_string(),
-            last_ping: None,
-            next_ping: None,
-            grace: 3600,
-            n_pings: 0,
-            tags: "".to_string(),
-            timeout: None,
-            tz: None,
-            schedule: None,
-            status: "up".to_string(),
-            update_url: "".to_string(),
-        };
-
-        // Should not panic with empty URL
-        let id = check.id();
-        assert_eq!(id, "");
     }
 }
